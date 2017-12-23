@@ -16,11 +16,10 @@ const (
 
 // Parsed comment
 type Comment struct {
-	Filename string
-	Line     int
-	Column   int
-	Text     string
-	Flags    Flags
+	Line   int
+	Column int
+	Text   string
+	Flags  Flags
 }
 
 // Separates the comments by file
