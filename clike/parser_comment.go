@@ -1,12 +1,18 @@
 package gcp_clike
 
 import (
+	"bufio"
 	"bytes"
+	"strings"
 	"unicode"
 
 	"github.com/RangelReale/gocompar"
 )
 
+//
+// State machine to extract comments from golang file
+// TODO: rework this mess
+//
 type parserComment struct {
 	comments              []*gocompar.Comment
 	is_comment            bool
@@ -104,7 +110,7 @@ func (pc *parserComment) addComment() {
 		(pc.comments[len(pc.comments)-1].Flags&gocompar.START_FULL_LINE) == gocompar.START_FULL_LINE &&
 		(pc.comments[len(pc.comments)-1].Flags&gocompar.MULTI_LINE) != gocompar.MULTI_LINE {
 		// add comment to previous line
-		pc.comments[len(pc.comments)-1].Text += "\n" + pc.curcomment.String()
+		pc.comments[len(pc.comments)-1].Text += "\n" + pc.cleanedCurComment()
 		pc.comments[len(pc.comments)-1].Flags |= gocompar.CONCAT_MULTI
 	} else {
 		var fl gocompar.Flags
@@ -117,7 +123,7 @@ func (pc *parserComment) addComment() {
 		pc.comments = append(pc.comments, &gocompar.Comment{
 			Line:   pc.comment_line_ct + 1,
 			Column: pc.comment_column_ct,
-			Text:   pc.curcomment.String(),
+			Text:   pc.cleanedCurComment(),
 			Flags:  fl,
 		})
 	}
@@ -130,4 +136,37 @@ func (pc *parserComment) finish() {
 	if pc.is_comment {
 		pc.addComment()
 	}
+}
+
+func (pc *parserComment) cleanedCurComment() string {
+
+	var ret bytes.Buffer
+
+	scan := bufio.NewScanner(bytes.NewReader(pc.curcomment.Bytes()))
+
+	is_first := true
+	for scan.Scan() {
+
+		line := strings.TrimSpace(scan.Text())
+
+		if !pc.is_comment_singleline {
+			// remove asterisks from beginning
+			line = strings.TrimLeftFunc(line, func(c rune) bool {
+				if unicode.IsSpace(c) || c == '*' {
+					return true
+				}
+				return false
+			})
+		}
+
+		if !is_first || line != "" {
+			if !is_first {
+				ret.WriteString("\n")
+			}
+			ret.WriteString(line)
+			is_first = false
+		}
+	}
+
+	return strings.TrimSpace(ret.String())
 }

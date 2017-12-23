@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+//
+// Golang comments extractor
+//
 type Parser struct {
 }
 
@@ -21,8 +24,6 @@ func (p *Parser) Parse(reader io.Reader) ([]*gocompar.Comment, error) {
 	pc := newparserComment()
 
 	for scanner.Scan() {
-		//fmt.Printf("@@@ %s\n", scanner.Text())
-
 		r := bufio.NewReader(strings.NewReader(scanner.Text()))
 		for {
 			c, _, err := r.ReadRune()
@@ -37,11 +38,12 @@ func (p *Parser) Parse(reader io.Reader) ([]*gocompar.Comment, error) {
 		}
 		pc.addNewLine()
 	}
-	pc.finish()
 
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
+
+	pc.finish()
 
 	return pc.comments, nil
 
