@@ -106,7 +106,7 @@ func (pc *parserComment) addNewLine() {
 
 func (pc *parserComment) addComment() {
 	// concatenate sequential single line comments
-	if len(pc.comments) > 0 && pc.noncomment_lines == 0 &&
+	if len(pc.comments) > 0 && pc.noncomment_lines == 0 && pc.is_comment_singleline &&
 		(pc.comments[len(pc.comments)-1].Flags&gocompar.START_FULL_LINE) == gocompar.START_FULL_LINE &&
 		(pc.comments[len(pc.comments)-1].Flags&gocompar.MULTI_LINE) != gocompar.MULTI_LINE {
 		// add comment to previous line
@@ -139,7 +139,6 @@ func (pc *parserComment) finish() {
 }
 
 func (pc *parserComment) cleanedCurComment() string {
-
 	var ret bytes.Buffer
 
 	scan := bufio.NewScanner(bytes.NewReader(pc.curcomment.Bytes()))
@@ -147,19 +146,28 @@ func (pc *parserComment) cleanedCurComment() string {
 	is_first := true
 	for scan.Scan() {
 
-		line := strings.TrimSpace(scan.Text())
+		// always trim right spaces
+		line := strings.TrimRightFunc(scan.Text(), unicode.IsSpace)
 
 		if !pc.is_comment_singleline {
-			// remove asterisks from beginning
-			line = strings.TrimLeftFunc(line, func(c rune) bool {
-				if unicode.IsSpace(c) || c == '*' {
-					return true
+			// check if there are spaces and asterisks at the beginning, and remove them
+			for li, lr := range line {
+				if lr != ' ' && lr != '*' {
+					break
 				}
-				return false
-			})
+				if lr == '*' {
+					line = line[li+1:]
+					break
+				}
+			}
 		}
 
-		if !is_first || line != "" {
+		// if there is one space at left, remove it
+		if len(line) > 0 && line[0] == ' ' {
+			line = line[1:]
+		}
+
+		if !is_first || strings.TrimSpace(line) != "" {
 			if !is_first {
 				ret.WriteString("\n")
 			}
@@ -168,5 +176,5 @@ func (pc *parserComment) cleanedCurComment() string {
 		}
 	}
 
-	return strings.TrimSpace(ret.String())
+	return ret.String()
 }
