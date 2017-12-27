@@ -18,9 +18,12 @@ import (
 type Pos int
 
 type token struct {
-	typ   tokenType
-	pos   Pos
-	value string
+	typ    tokenType
+	pos    Pos
+	Line   int
+	Column int
+	LineHasData bool
+	value  string
 }
 
 func (t token) String() string {
@@ -92,6 +95,9 @@ type lexer struct {
 	start      Pos        // start position of this item
 	width      Pos        // width of last rune read from input
 	lastPos    Pos        // position of most recent item returned by nextItem
+	line       int        // current line
+	column     int        // current column
+	lineHasData bool // if current line already had non-space data
 	tokens     chan token // channel of scanned tokens
 	parenDepth int        // nesting depth of () exprs <- probably not needed
 }
@@ -100,6 +106,7 @@ func lex(input []byte) *lexer {
 	l := lexer{
 		input:  input,
 		state:  lexText,
+		line:   1,
 		tokens: make(chan token, 2),
 	}
 	go l.run()
@@ -140,8 +147,34 @@ func (l *lexer) backup() {
 
 // emit passes an item back to the client.
 func (l *lexer) emit(t tokenType) {
-	l.tokens <- token{t, l.start, string(l.input[l.start:l.pos])}
+	value := string(l.input[l.start:l.pos])
+	l.tokens <- token{t, l.start, l.line, l.column, l.lineHasData, value}
 	l.start = l.pos
+	// update line and column
+	l.addLines([]byte(value))
+}
+
+func (l *lexer) addLines(value []byte) {
+	lastline := value
+	var ct int
+	for {
+		i := bytes.IndexByte(value, '\n')
+		if i == -1 {
+			break
+		}
+		if i < len(value)-1 && value[i+1] == '\r' {
+			i++
+		}
+		l.line++
+		ct++
+		if i >= len(value) {
+			break
+		}
+		value = value[i+1:]
+		lastline = value
+	}
+	l.column = len(lastline)
+	l.lineHasData = strings.TrimSpace(string(lastline)) != ""
 }
 
 // ignore skips over the pending input before this point.
@@ -161,7 +194,7 @@ func (l *lexer) accept(valid string) bool {
 // error returns an error token and terminates the scan by passing back a nil
 // pointer that will be the next state, terminating l.run.
 func (l *lexer) errorf(format string, args ...interface{}) stateFn {
-	l.tokens <- token{tokenError, l.start, fmt.Sprintf(format, args...)}
+	l.tokens <- token{tokenError, l.start, l.line, l.column, l.lineHasData, fmt.Sprintf(format, args...)}
 	return nil
 }
 
